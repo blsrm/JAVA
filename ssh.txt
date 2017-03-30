@@ -1,0 +1,108 @@
+Simple bash syntax to run multiple commands on remote machine
+
+Simply run command2 if command1 successful on a remote host called foo
+$ ssh bar@foo "command1 && command2"
+
+Run date and hostname commands:
+$ ssh user@host "date && hostname"
+
+$ ssh -t vivek@server1.cyberciti.biz "sudo /sbin/shutdown -h now"
+
+$ ssh root@server1.cyberciti.biz "sync && sync && /sbin/shutdown -h now"
+
+
+sudo requires interactive shell, it can be enabled with -t parameter.
+ssh -t $HOST sudo ls /root
+
+
+Multi-line command with variables expansion
+
+In order to make variables expansion work, use bash -c.
+
+VAR1="Variable 1"
+ssh $HOST bash -c "'
+ls
+pwd
+if true; then
+    echo $VAR1
+else
+    echo "False"
+fi
+'"
+
+
+https://www.zaiste.net/2014/08/a_few_ways_to_execute_commands_remotely_using_ssh/
+
+
+To execute commands that require using sudo on a remote machine use ssh's -t option and pass the commands to ssh. The -t option allocates a psuedo tty and enables user interaction with the commands ran by ssh, such as entering a password for sudo
+
+$ ssh user@host -t 'sudo foo'
+
+
+To automate the whole thing:
+
+#!/bin/bash
+SERVERS=( server1 server2 server3 )
+
+for HOST in ${SERVERS[@]}; do 
+    ssh user@${HOST} -t 'sudo sed -i "\$a text to insert" /path/to/file'
+
+    if [[ $? -ne 0 ]]; then
+        echo "ERROR: $HOST did not complete"
+     else   
+        echo "$HOST complete"
+    fi   
+done
+
+
+
+You can add the StrictHostKeyChecking=no option to ssh:
+
+ssh -o StrictHostKeyChecking=no -l username hostname "pwd; ls"
+
+This will disable the host key check and automatically add the host key to the list of known hosts. If you do not want to have the host added to the known hosts file, add the option -o UserKnownHostsFile=/dev/null.
+
+
+
+
+Also, don't forget to escape variables if you want to pick them up from the destination host.
+
+This has caught me out in the past.
+
+For example:
+
+user@host> ssh user2@host2 "echo \$HOME"
+prints out /home/user2
+
+while
+
+user@host> ssh user2@host2 "echo $HOME"
+prints out /home/user
+
+Another example:
+
+user@host> ssh user2@host2 "echo hello world | awk '{print \$1}'"
+prints out "hello" correctly.
+
+
+
+
+
+
+
+
+Multi-line command with variables expansion
+
+In order to make variables expansion work, use bash -c.
+
+VAR1="Variable 1"
+ssh $HOST bash -c "'
+ls
+pwd
+if true; then
+    echo $VAR1
+else
+    echo "False"
+fi
+'"
+
