@@ -1,0 +1,2 @@
+netstat -an -f inet 2>/dev/null
+netstat -an -f inet6 2>/dev/null

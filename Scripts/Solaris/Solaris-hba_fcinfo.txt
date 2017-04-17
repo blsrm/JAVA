@@ -1,0 +1,3 @@
+echo begin fcinfo_hba:
+PRIV_FCINFO fcinfo hba-port
+echo end fcinfo_hba:

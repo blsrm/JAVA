@@ -1,0 +1,12 @@
+
+PATH=/opt/fcms/bin:$PATH
+
+echo begin fcmsutil:
+for device in `/usr/sbin/ioscan -kfnC fc 2>/dev/null | grep /dev`
+do
+    echo HBA attribute begin : $device
+    PRIV_FCMSUTIL fcmsutil $device
+    PRIV_FCMSUTIL fcmsutil $device vpd
+    echo HBA attribute end : $device
+done
+echo end fcmsutil:

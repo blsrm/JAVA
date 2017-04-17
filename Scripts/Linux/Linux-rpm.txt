@@ -1,0 +1,1 @@
+rpm -qa --queryformat %{NAME}:%{VERSION}:%{RELEASE}:%{ARCH}:%{EPOCH}@ 2>/dev/null

@@ -1,0 +1,23 @@
+
+NETSTAT_OUT=`netstat -inw 2>/dev/null`
+if [ $? -ne 0 ]; then
+    NETSTAT_OUT=`netstat -in 2>/dev/null`
+fi
+INTERFACES=`echo "$NETSTAT_OUT" | cut -d\  -f 1 | grep -Ev '\*|^Name|^lo0|^IP|^$' | sort -u`
+
+for INTERFACE in $INTERFACES
+do
+      ifconfig $INTERFACE 2>/dev/null
+done
+echo 'begin lanscan:'
+lanscan -pia 2>/dev/null
+echo 'end lanscan:'
+echo 'begin lanadmin:'
+for interface in `lanscan -p 2>/dev/null`
+do
+  echo begin-interface: $interface
+  PRIV_LANADMIN lanadmin -x $interface 2>/dev/null | grep -v 'NO LINK'
+  echo end-interface: $interface
+done
+echo 'end lanadmin:'
+            

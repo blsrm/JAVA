@@ -1,0 +1,1 @@
+PRIV_LSOF lsof -l -n -P -F ptPTn -i 2>/dev/null

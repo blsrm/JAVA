@@ -1,0 +1,11 @@
+os_ver=`uname -r | cut -d. -f2`
+if [ $os_ver -ge 11 ]; then
+    echo begin pkg_list:
+    echo arch: `uname -p`
+    pkg list -H --no-refresh 2>/dev/null
+    echo end pkg_list:
+fi
+PKGINFO=`tw_which pkginfo`
+if [ ! -z "$PKGINFO" -a -x $PKGINFO ]; then
+    pkginfo -l 2>/dev/null
+fi

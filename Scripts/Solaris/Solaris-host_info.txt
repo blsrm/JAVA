@@ -1,0 +1,118 @@
+
+os_ver=`uname -r | cut -d. -f2`
+if [ $os_ver -ge 11 ]; then
+     pkg list -H --no-refresh system/kernel | awk '{print "kernel:", $2; exit}'
+else
+    showrev 2>/dev/null | nawk -F: '/^Kernel version/ {gsub("^ *", "", $2); print "kernel:", $2; exit}'
+fi
+echo 'model:' `uname -i 2>/dev/null`
+/usr/sbin/prtconf 2>/dev/null | nawk '/^Memory size:/ {print "ram: " $3 "MB"}'
+
+if [ `uname -p` = i386 ]; then
+    if [ -x /usr/sbin/smbios ]; then
+        /usr/sbin/smbios -t SMB_TYPE_SYSTEM 2>/dev/null | nawk '{
+            if( $1 ~ /Manufacturer:/ ) { sub(".*Manufacturer: *","");  printf( "vendor: %s\n", $0 ); }
+            if( $1 ~ /Product:/ ) { sub(".*Product: *",""); printf( "model: %s\n", $0 ); }
+            if( $1 ~ /Serial/ && $2 ~ /Number:/ ) { sub(".*Serial Number: *",""); printf( "serial: %s\n", $0 ); }
+        }'
+    else
+        if [ -f /usr/sbin/dmidecode ]; then
+            PRIV_DMIDECODE /usr/sbin/dmidecode 2>/dev/null | nawk '/DMI type 1,/,/^Handle 0x0*[2-9]+0*/ {
+                if( $1 ~ /Manufacturer:/ ) { sub(".*Manufacturer: *","");  printf( "vendor: %s\n", $0 ); }
+                if( $1 ~ /Product/ && $2 ~ /Name:/ ) { sub(".*Product Name: *",""); printf( "model: %s\n", $0 ); }
+                if( $1 ~ /Serial/ && $2 ~ /Number:/ ) { sub(".*Serial Number: *",""); printf( "serial: %s\n", $0 ); }
+            }'
+        fi
+    fi
+else
+    # Solaris SPARC - use prtdiag if possible
+    run_prtdiag=1
+    if [ -x /usr/bin/zonename ]; then
+        # Solaris 10 or later, check this is the global zone before attempting
+        # to run prtdiag
+        if [ `/usr/bin/zonename 2>/dev/null` != "global" ]; then
+            # Non global zone, don't run prtdiag
+            run_prtdiag=0
+        fi
+    fi
+
+    if [ $run_prtdiag -eq 1 ]; then
+        if [ -x /usr/platform/`uname -m`/sbin/prtdiag ]; then
+            platdir=/usr/platform/`uname -m`/sbin
+        elif [ -x /usr/platform/`uname -m`/sbin/sparcv9/prtdiag ]; then
+            platdir=/usr/platform/`uname -m`/sbin/sparcv9
+        elif [ -x /usr/platform/`uname -i`/sbin/prtdiag ]; then
+            platdir=/usr/platform/`uname -i`/sbin
+        elif [ -x /usr/sbin/prtdiag ]; then
+            platdir=/usr/sbin
+        else
+            platdir=/sbin
+        fi
+        if [ -x $platdir/prtdiag ]; then
+            echo 'begin prtdiag:'
+            $platdir/prtdiag -v 2>/dev/null
+            echo ''
+            echo 'end prtdiag'
+        fi
+    fi
+fi
+
+# Get serial number. We first try sneep as that knows how to collect the
+# serial number on the vast majority of Sun/Fujitsu machines. If that is not
+# available we try a few obvious fallbacks including any "Chassis Serial Number"
+# from prtdiag
+if [ -x /opt/SUNWsneep/bin/sneep ]; then
+    serial=`/opt/SUNWsneep/bin/sneep 2>/dev/null`
+    if [ "$serial" != "unknown" ]; then
+        echo "serial: $serial"
+    fi
+else
+    # Sneep isn't available. Check for Fujitsu serialid command
+    if [ -x /opt/FJSVmadm/sbin/serialid ]; then
+        /opt/FJSVmadm/sbin/serialid | sed -e 's/serialid/serial/'
+    fi
+fi
+
+echo 'hostid:' `hostid`
+if [ -r /etc/ssphostname ]; then
+    # E10K support
+    echo 'ssphostname:' `cat /etc/ssphostname`
+fi
+
+# Solaris 9 and earlier do not support zones directly.
+# There isn't any commands to run inside a branded zone to detect if it's a zone.
+# However, the zonename is usually listed in /etc/mnttab (for all solaris zones)
+# For example:
+# Solaris 11: mnttab /zones/sol11z1/root/etc/mnttab mntfs nodevices,zone=sol11z1,sharezone=1,dev=8600002 1396255682
+# Solaris 9:  mnttab  /etc/mnttab     mntfs   nodevices,zone=phx-eai-ris-prod1-int,dev=51c0017        1393042650
+if [ $os_ver -lt 10 -a -r /etc/mnttab ]; then
+    mnttabstr=`cat /etc/mnttab | grep mnttab | grep zone=`
+    if [ "$mnttabstr" != "" ]; then
+        options=`echo $mnttabstr | awk '{ print $4 }' | tr "," "\n"`
+        for member in $options; do
+            case $member in
+                zone* ) echo $member | sed -e 's/zone=/zonename: /';;
+            esac
+        done
+    fi
+fi
+
+if [ -x /usr/bin/zonename ]; then
+    # Solaris 10 zone support
+    echo 'zonename:' `/usr/bin/zonename 2>/dev/null`
+fi
+if [ -x /usr/sbin/zoneadm ]; then
+    # Solaris 10 zone support
+    echo 'begin zoneadm:'
+    /usr/sbin/zoneadm list -ip 2>/dev/null
+    echo 'end zoneadm:'
+fi
+if [ -x /usr/sbin/virtinfo ]; then
+    # LDOM support for Solaris 11 in system/core-os, and Solaris 9/10 in SUNWcsu
+    echo 'begin virtinfo:'
+    /usr/sbin/virtinfo -ap 2>/dev/null
+    echo 'end virtinfo:'
+fi
+echo 'begin solaris_uptime_string:'
+uptime 2>/dev/null
+echo 'end solaris_uptime_string:'

@@ -1,0 +1,80 @@
+
+OSVER=`uname -r 2>/dev/null | sed 's/[A-Z.]//g'`
+kernel_bits=`getconf KERNEL_BITS 2>/dev/null`
+if [ "$kernel_bits" = "" ]; then
+    kernel_bits=32
+fi
+echo "kernel: $kernel_bits bit"
+echo 'vendor: HP'
+echo 'model:' `model 2>/dev/null`
+hostid=`getconf CS_MACHINE_IDENT 2>/dev/null`
+partition_id=`getconf CS_PARTITION_IDENT 2>/dev/null`
+if [ "$partition_id" != "" ]; then
+    echo 'partition_id:' $partition_id
+    if [ "$hostid" = "" ]; then
+        hostid="$partition_id"
+    fi
+    if [ "$partition_id" != "$hostid" ]; then
+        hostid="$hostid:$partition_id"
+    fi
+fi
+if [ "$hostid" != "" ]; then
+    echo 'hostid:' $hostid
+fi
+serial=`getconf CS_MACHINE_SERIAL 2>/dev/null`
+if [ "$serial" != "" ]; then
+    echo 'serial:' $serial
+fi
+echo 'license:' `uname -l`
+
+if [ -x /usr/contrib/bin/machinfo ]; then
+    echo 'begin machinfo:'
+    if [ $OSVER -ge 1131 ]; then
+        /usr/contrib/bin/machinfo -v
+    else
+        /usr/contrib/bin/machinfo
+    fi
+    echo 'end machinfo:'
+else
+    logical_ram=""
+    ram=""
+    if [ -x /usr/sbin/parstatus ]; then
+        par_id=`/usr/sbin/parstatus -w 2> /dev/null | grep "The local partition number is" | sed 's/.*The local partition number is \([0-9]*\)\..*/\1/'`
+        if [ "$par_id" ]; then
+            echo par_id: $par_id
+            logical_ram=`/usr/sbin/parstatus -C -M |awk -v PAR_ID=$par_id 'BEGIN{ FS=":" };{ if ($NF==PAR_ID) { split($5, memarray,"/"); mem += int(memarray[1])} };END{ printf "logical_ram: %d\n", mem * 1048576 * 1024 }'`
+        fi
+    fi
+
+    ram=`echo "selclass qualifier memory;infolog" | cstm 2>/dev/null | grep 'System Total'`
+    if [ "$ram" != "" ]; then
+        echo $ram | sed -e 's/^.*(\(.*\))[^0-9]*\([0-9]*\).*$/ram: \2\1/'
+    fi
+
+    if [ "$logical_ram" = "" ]; then
+        # Get logical_ram from manifest for systems other than vpar
+        if [ "$par_id" = "" ]; then
+            # first try to check the Ignite-UX manifest
+            MANIFEST_PATH="/var/opt/ignite/local/manifest/manifest"
+            if [ -r $MANIFEST_PATH ]; then
+                logical_ram=`grep "Main Memory" $MANIFEST_PATH | cut -d: -f2 | sed 's/ //g'`
+                if [ "$logical_ram" != "" ]; then
+                    echo "logical_ram: $logical_ram"
+                fi
+            fi
+        fi
+        if [ "$logical_ram" = "" ]; then  #cannot read manifest or cannot extract RAM info, try to read syslog
+            SYSLOG_PATH="/var/adm/syslog/syslog.log"
+            if [ -r $SYSLOG_PATH ]; then
+                logical_ram=`grep "Physical" $SYSLOG_PATH | sed 's/^.*Physical: *\([0-9]*\).*\([GMK]\)bytes.*$/\1\2B/'`
+                if [ "$logical_ram" != "" ]; then
+                    echo "logical_ram: $logical_ram"
+                fi
+            fi
+        fi   
+    fi
+fi
+
+echo 'begin hpux_uptime_string:'
+uptime 2>/dev/null
+echo 'end hpux_uptime_string'

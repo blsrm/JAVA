@@ -1,0 +1,18 @@
+
+PATH=/usr/sbin/lpfc:/usr/sbin/lpfs:$PATH
+
+echo begin lputil_listhbas:
+PRIV_LPUTIL lputil listhbas
+echo end lputil_listhbas:
+
+echo begin lputil_fwlist:
+i=0
+max_count=`echo 0 | PRIV_LPUTIL lputil count 2>/dev/null`
+if [ $? -eq 0 ]; then
+    while [ $i -lt "$max_count" ]
+    do
+        PRIV_LPUTIL lputil fwlist $i 2>/dev/null | grep "Functional Firmware" || echo "Functional Firmware: None"
+        i=`expr $i + 1`
+    done
+fi
+echo end lputil_fwlist:

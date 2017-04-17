@@ -1,0 +1,5 @@
+PATH=/opt/EMLXemlxu/bin:$PATH
+
+echo begin emlxadm_get_host_attrs:
+PRIV_EMLXADM emlxadm devctl -y get_host_attrs
+echo end emlxadm_get_host_attrs:

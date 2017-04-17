@@ -1,0 +1,2 @@
+
+PRIV_SWLIST swlist -v -l product -a tag -a revision -a title -a vendor_tag 2>/dev/null

@@ -1,0 +1,16 @@
+echo begin sysfs_hba:
+if [ ! -d /sys/class ]; then
+    echo /sys/class does not exist
+elif [ -r /proc/vmware/version ] &&
+     [ `grep -o -m1 ESX /proc/vmware/version` ] ||
+     [ -r /etc/vmware-release ] &&
+     [ `grep -o ESX /etc/vmware-release` ]; then
+    echo ESX HBA drivers do not support sysfs
+else
+    for device in `ls /sys/class/fc_host 2>/dev/null`
+    do
+        systool -c fc_host -v $device
+        systool -c scsi_host -v $device
+    done
+fi
+echo end sysfs_hba:

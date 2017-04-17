@@ -1,0 +1,22 @@
+echo begin df:
+PRIV_DF bdf -l 2>/dev/null
+echo end df:
+echo begin mount:
+mount -p 2>/dev/null
+echo end mount:
+echo begin xtab:
+if [ -r /etc/xtab ]; then
+    cat /etc/xtab
+fi
+echo end xtab:
+echo begin smbclient:
+smbclient -N -L localhost
+echo end smbclient:
+echo begin smbconf:
+configfile=`smbstatus -v 2>/dev/null | grep "using configfile" | awk '{print $4;}'`
+if [ "$configfile" != "" ]; then
+    if [ -r $configfile ]; then
+        cat $configfile
+    fi
+fi
+echo end smbconf:

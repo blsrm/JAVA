@@ -1,0 +1,11 @@
+
+P=%(path)s
+PRIV_TEST -f "${P}" -a -r "${P}"
+if [ $? -eq 0 ]; then
+    echo "begin content:"
+    if [ -x /usr/xpg4/bin/sed ]; then
+        PRIV_CAT "${P}" | /usr/xpg4/bin/sed -e 's/[^[:print:][:blank:]]//g'
+    else
+        PRIV_CAT "${P}"
+    fi
+fi

@@ -1,0 +1,157 @@
+
+# The specification only allows for the physical RAM size to be given in either
+# KB or MB.  [System Management BIOS (SMBIOS) Reference Specification, p.86 -
+# http://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.8.0.pdf]
+if [ -f /usr/sbin/dmidecode ]; then
+    dmidecode_ram=`PRIV_DMIDECODE /usr/sbin/dmidecode -t 17 2>/dev/null | awk '
+        /Size:/ {
+            if ($3 == "kB" || $3 == "KB")
+                size += $2
+            else if ($3 == "MB")
+                size += $2*1024
+        }
+        END {
+            print size
+        }'`
+    if [ "${dmidecode_ram}" != "" ]; then
+        ram="${dmidecode_ram}KB"
+    fi
+fi
+
+logical_ram=`awk '/^MemTotal:/ {print $2 "KB"}' /proc/meminfo 2>/dev/null`
+
+if [ -f /usr/sbin/esxcfg-info ]; then
+    # On a VMWare ESX controller, report the *real* hardware information
+    file=/tmp/tideway-hw-$$
+    uuid=""
+    PRIV_ESXCFG /usr/sbin/esxcfg-info --hardware > ${file} 2>/dev/null
+    if [ $? -eq 0 ]; then
+        ram=`grep "Physical Mem\." ${file} | sed 's/[^0-9]*//g'`B
+        # For esx/esxi, we should NOT use memory from dmesg or /proc/meminfo
+        # because the values are incorrect
+        logical_ram=""
+        uuid=`grep "BIOS UUID\." ${file}`
+    fi
+    rm -f ${file}
+
+    # Get UUID as hostid if possible
+    if [ "$uuid" != "" ]; then
+        # Process horrid BIOS UUID format :(
+        echo "$uuid" | sed -e 's/\./ /g' | awk '{
+printf("hostid: ");
+for(i = 3 ; i < 19; i++)
+{
+    printf("%02s", substr($i,3,2));
+    if (i == 6 || i == 8 || i == 10 || i == 12) printf("-");
+}
+printf("\n");
+}'
+    else
+        if [ -r /etc/slp.reg ]; then
+            uuid=`grep hardwareUuid /etc/slp.reg | cut -f2 -d= | tr '[:upper:]' '[:lower:]' | sed -e 's/"//g'`
+            if [ "${uuid}" != "" ]; then
+                echo 'hostid:' ${uuid}
+            fi
+        fi
+    fi
+fi
+
+if [ -f /opt/xensource/bin/xe ]; then
+    XE=/opt/xensource/bin/xe
+    # /proc/meminfo reports incorrectly for Xen domains, use "xe"
+    uuid=`PRIV_XE $XE host-list | grep uuid | head -n 1 | cut -f2 -d: | awk '{print $1;}'`
+    if [ $? -eq 0 ]; then
+        logical_ram=`PRIV_XE $XE host-param-get uuid=$uuid param-name=memory-total`
+    fi
+fi
+
+echo 'kernel:' `uname -r`
+
+if [ "${ram}" != "" ]; then
+    echo 'ram:' ${ram}
+fi
+if [ "${logical_ram}" != "" ]; then
+    echo 'logical_ram:' ${logical_ram}
+fi
+
+# Get uptime in days and seconds
+uptime | awk '
+{
+  if ( $4 ~ /day/ ) {
+    print "uptime:", $3;
+    z = split($5,t,":");
+    printf( "uptimeSeconds: %d\n", ($3 * 86400) + (t[1] * 3600) + (t[2] * 60) );
+  } else {
+    print "uptime: 0";
+    z = split($3,t,":");
+    print "uptimeSeconds:", (t[1] * 3600) + (t[2] * 60);
+  }
+}'
+
+# zLinux?
+if [ -r /proc/sysinfo -a -d /proc/dasd ]; then
+    echo "candidate_vendor[]:" `egrep '^Manufacturer:' /proc/sysinfo | awk '{print $2;}'`
+    type=`egrep '^Type:' /proc/sysinfo | awk '{print $2;}'`
+    model=`egrep '^Model:' /proc/sysinfo | awk '{print $2;}'`
+    echo "candidate_model[]: $type-$model"
+    echo "zlinux_sequence:" `egrep '^Sequence Code:' /proc/sysinfo | awk '{print $3;}'`
+    echo "zlinux_vm_name:" `egrep '^VM00 Name:' /proc/sysinfo | awk '{print $3;}'`
+    echo "zlinux_vm_software:" `egrep '^VM00 Control Program:' /proc/sysinfo | awk '{print $4, $5;}'`
+fi
+
+# Can we get information from the BIOS? We use lshal if available as that
+# requires no superuser permissions but we attempt to run all tools as some
+# can return invalid values in some cases. The system will select the "best"
+# candidate from the values returned, where "best" is the first non-bogus value
+if [ -x /usr/bin/lshal ]; then
+    /usr/bin/lshal 2>/dev/null | sed -e 's/(string)$//g' -e "s/'//g" | awk '
+    $1 ~ /(smbios\.system|system\.hardware)\.serial/ {
+        sub(/.*(smbios\.system|system\.hardware).serial = */, "");
+        printf("candidate_serial[]: %s\n", $0);
+    }
+    $1 ~ /(smbios\.system|system\.hardware)\.uuid/ {
+        sub(/.*(smbios\.system|system\.hardware)\.uuid = */, "");
+        printf("candidate_uuid[]: %s\n", $0);
+    }
+    $1 ~ /(smbios\.system|system\.hardware)\.product/ {
+        sub(/.*(smbios\.system|system\.hardware)\.product = */, "");
+        printf("candidate_model[]: %s\n", $0);
+    }
+    $1 ~ /system(\.hardware)?\.vendor/ {
+        sub(/.*(system|system\.hardware)\.vendor = */, "");
+        printf("candidate_vendor[]: %s\n", $0);
+    }'
+fi
+if [ -f /usr/sbin/dmidecode ]; then
+        PRIV_DMIDECODE /usr/sbin/dmidecode 2>/dev/null | sed -n '/DMI type 1,/,/^Handle 0x0/p' | awk '
+    $1 ~ /Manufacturer:/ { sub(".*Manufacturer: *", ""); printf("candidate_vendor[]: %s\n", $0); }
+    $1 ~ /Vendor:/ { sub(".*Vendor: *", ""); printf("candidate_vendor[]: %s\n", $0); }
+    $1 ~ /Product/ && $2 ~ /Name:/ { sub(".*Product Name: *", ""); printf("candidate_model[]: %s\n", $0); }
+    $1 ~ /Product:/ { sub(".*Product: *",""); printf("candidate_model[]: %s\n", $0 ); }
+    $1 ~ /Serial/ && $2 ~ /Number:/ { sub(".*Serial Number: *", ""); printf("candidate_serial[]: %s\n", $0); }
+    $1 ~ /UUID:/ { sub(".*UUID: *", ""); printf( "candidate_uuid[]: %s\n", $0 ); } '
+fi
+if [ -f /usr/sbin/hwinfo ]; then
+        PRIV_HWINFO /usr/sbin/hwinfo --bios 2>/dev/null | sed -n '/System Info:/,/Info:/p' | awk '
+    $1 ~ /Manufacturer:/ { sub(".*Manufacturer: *", ""); gsub("\"", ""); printf("candidate_vendor[]: %s\n", $0); }
+    $1 ~ /Product:/ { sub(".*Product: *", ""); gsub("\"", ""); printf("candidate_model[]: %s\n", $0); }
+    $1 ~ /Serial:/ { sub(".*Serial: *", ""); gsub("\"", ""); printf("candidate_serial[]: %s\n", $0); }
+    $1 ~ /UUID:/ { sub(".*UUID: *", ""); gsub("\"", ""); printf("candidate_uuid[]: %s\n", $0); } '
+fi
+if [ -d /sys/class/dmi/id ]; then
+    echo "candidate_model[]: " `cat /sys/class/dmi/id/product_name 2>/dev/null`
+    echo "candidate_serial[]: " `PRIV_CAT /sys/class/dmi/id/product_serial 2>/dev/null`
+    echo "candidate_uuid[]: " `PRIV_CAT /sys/class/dmi/id/product_uuid 2>/dev/null`
+    echo "candidate_vendor[]: " `cat /sys/class/dmi/id/sys_vendor 2>/dev/null`
+fi
+
+# PPC64 LPAR?
+if [ -r /proc/ppc64/lparcfg ]; then
+    echo begin lparcfg:
+    cat /proc/ppc64/lparcfg 2>/dev/null
+    echo end lparcfg
+fi
+# LPAR name?
+if [ -r /proc/device-tree/ibm,partition-name ]; then
+    echo "lpar_partition_name:" `cat /proc/device-tree/ibm,partition-name`
+fi

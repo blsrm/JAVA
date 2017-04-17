@@ -1,0 +1,27 @@
+
+ihn=`hostname 2>/dev/null`
+echo 'hostname:' $ihn
+if [ -r /etc/resolv.conf ]; then
+    echo 'dns_domain:' `awk '/^(search|domain)/ { print $2; exit }' /etc/resolv.conf 2>/dev/null`
+fi
+echo 'domain:' `domainname 2>/dev/null`
+os=""
+os_ver=`uname -r | cut -d. -f2`
+if [ $os_ver -ge 11 ]; then
+    os=`pkg info entire 2>/dev/null | grep "Version:" | awk 'NR > 1 {print $1}' RS='(' FS=')'`
+    if [ "$os" = "" ]; then
+        os=`pkg info entire | awk '/Branch:/ {print $2}' | nawk -F. '{printf "Oracle Solaris 11.%s.%s.%s.%s", $3, $4, $6, $7;}'`
+    fi
+fi
+if [ "$os" = "" -a -r /etc/release ]; then
+    os=`head -1 /etc/release 2>/dev/null`
+    update=`grep Update /etc/release 2>/dev/null`
+    if [ ! -z "$update" ]; then
+        os="$os, $update"
+    fi
+fi
+if [ "$os" = "" ]; then
+    os=`uname -sr 2>/dev/null`
+fi
+echo 'os:' $os
+echo 'os_arch:' `isainfo -k 2>/dev/null`

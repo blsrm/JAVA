@@ -1,0 +1,26 @@
+echo begin df:
+PRIV_DF df -lk 2>/dev/null
+echo end df:
+echo begin mount:
+mount 2>/dev/null
+echo end mount:
+echo begin xtab:
+if [ -s /var/lib/nfs/xtab ]; then
+    cat /var/lib/nfs/xtab
+else
+    if [ -s /var/lib/nfs/etab ]; then
+        cat /var/lib/nfs/etab
+    fi
+fi
+echo end xtab:
+echo begin smbclient:
+smbclient -N -L localhost
+echo end smbclient:
+echo begin smbconf:
+configfile=`smbstatus -v 2>/dev/null | grep "using configfile" | awk '{print $4;}'`
+if [ "$configfile" != "" ]; then
+    if [ -r $configfile ]; then
+        cat $configfile
+    fi
+fi
+echo end smbconf:

@@ -1,0 +1,1 @@
+ip -o link show 2>/dev/null

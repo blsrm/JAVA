@@ -1,0 +1,6 @@
+if [ `uname -r | cut -d. -f2` -eq 11 ]; then
+        if [ `uname -r | cut -d. -f3` -ge 11 ]; then
+                PS_X_OPT=x
+        fi
+fi
+env UNIX95=1 ps -e${PS_X_OPT}o pid,ppid,uid,user,args 2>/dev/null

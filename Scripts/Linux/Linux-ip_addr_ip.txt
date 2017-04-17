@@ -1,0 +1,1 @@
+ip address show 2>/dev/null

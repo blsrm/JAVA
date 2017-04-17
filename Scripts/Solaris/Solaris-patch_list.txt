@@ -1,0 +1,7 @@
+
+os_ver=`uname -r | cut -d. -f2`
+if [ $os_ver -lt 11 ]; then
+    showrev -p 2>/dev/null | grep -v "No patches are installed" | cut -c-16 | nawk '{print $2;}'
+else
+    echo NO PATCHES
+fi

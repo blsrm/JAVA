@@ -1,0 +1,14 @@
+echo begin procfs_hba:
+if [ ! -d /proc/scsi ]; then
+    echo /proc/scsi does not exist
+else
+    for driver in 'qla*' 'lpfc*'
+    do
+        for device in `find /proc/scsi/$driver/* 2>/dev/null`
+        do
+            echo HBA Port $device
+            cat $device
+        done
+    done
+fi
+echo end procfs_hba:

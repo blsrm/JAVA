@@ -1,0 +1,19 @@
+os_ver=`uname -r | cut -d. -f2`
+if [ $os_ver -ge 10 -a  -x /usr/bin/zonename ]; then
+    zone=`/usr/bin/zonename 2>/dev/null`
+    ps -eo pid,ppid,uid,user,zone,args 2>/dev/null | nawk "\$5~/^($zone|ZONE)$/ {print}"
+else
+    ps -eo pid,ppid,uid,user,args 2>/dev/null
+fi
+if [ $os_ver -ge 11 ]; then
+    PRIV_PS /usr/bin/ps axww 2>/dev/null
+else
+    if [ -x /usr/ucb/ps ]; then
+        PRIV_PS /usr/ucb/ps -axww 2>/dev/null
+    fi
+fi
+if [ -x /usr/bin/pargs -a -d /proc ]; then
+    echo begin pargs:
+    PRIV_PARGS /usr/bin/pargs `ls -1 /proc` 2>/dev/null
+    echo end pargs:
+fi

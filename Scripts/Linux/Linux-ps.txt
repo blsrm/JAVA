@@ -1,0 +1,1 @@
+ps -eo pid,ppid,uid,user,cmd --no-headers -ww 2>/dev/null

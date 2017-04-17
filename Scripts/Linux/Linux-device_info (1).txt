@@ -1,0 +1,74 @@
+
+echo 'hostname:' `hostname 2>/dev/null`
+echo 'fqdn:' `hostname --fqdn 2>/dev/null`
+dns_domain=`hostname -d 2>/dev/null | sed -e 's/(none)//'`
+if [ "$dns_domain" = "" -a -r /etc/resolv.conf ]; then
+  dns_domain=`awk '/^(domain|search)/ {sub(/\\\\000$/, "", $2); print $2; exit }' /etc/resolv.conf 2>/dev/null`
+fi
+echo 'dns_domain: ' $dns_domain
+
+nis_domain=`domainname 2>/dev/null`
+if [ "$nis_domain" = "" ]; then
+  nis_domain=`hostname -y 2>/dev/null`
+fi
+echo 'domain: ' $nis_domain | sed -e 's/(none)//'
+
+os=""
+# SuSE lsb_release does not provide service pack so prefer SuSE-release file
+# However, this file is being deprecated so we will fallback to os-release
+# (see below)
+if [ "$os" = "" -a -r /etc/SuSE-release ]; then
+    os=`cat /etc/SuSE-release | egrep -v '^#'`
+fi
+if [ "$os" = "" -a -x /usr/bin/lsb_release ]; then
+    # We'd like to use -ds but that puts quotes in the output!
+    os=`/usr/bin/lsb_release -d | cut -f2 -d: | sed -e 's/^[ \t]//'`
+    if [ "$os" = "(none)" ]; then
+        os=""
+    elif [ "$os" != "" ]; then
+        # Check to see if its a variant of Red Hat
+        rpm -q oracle-logos > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            # Oracle variant
+            os="Oracle $os"
+        fi
+    fi
+fi
+if [ "$os" = "" -a -r /proc/vmware/version ]; then
+    os=`grep -m1 ESX /proc/vmware/version`
+fi
+if [ "$os" = "" -a -r /etc/vmware-release ]; then
+    os=`grep ESX /etc/vmware-release`
+fi
+if [ "$os" = "" -a -r /etc/redhat-release ]; then
+    os=`cat /etc/redhat-release`
+
+    # Check to see if its a variant of Red Hat
+    rpm -q oracle-logos > /dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        # Oracle variant
+        os="Oracle $os"
+    fi
+fi
+if [ "$os" = "" -a -r /etc/debian_version ]; then
+    ver=`cat /etc/debian_version`
+    os="Debian Linux $ver"
+fi
+if [ "$os" = "" -a -r /etc/mandrake-release ]; then
+    os=`cat /etc/mandrake-release`
+fi
+if [ "$os" = "" -a -r /etc/os-release ]; then
+    # Use os-release for SuSE (if SuSE-release wasn't present, above)
+    os_id=`grep ID= /etc/os-release | cut -f2 '-d"'`
+    if [ "$os_id" = "" ]; then
+        os_id=`grep ID= /etc/os-release | cut -f2 -d=`
+    fi
+    if [ "$os_id" = "sles" -o "$os_id" = "opensuse" ]; then
+        os=`grep PRETTY_NAME /etc/os-release | cut -f2 '-d"'`
+    fi
+fi
+if [ "$os" = "" ]; then
+    os=`uname -sr 2>/dev/null`
+fi
+echo 'os:' $os
+echo 'os_arch:' `uname -m 2>/dev/null`

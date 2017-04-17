@@ -1,0 +1,2 @@
+
+PRIV_SWLIST swlist -l product 2>/dev/null | egrep -v '^#' | egrep 'PH[A-Z]{2}_[0-9]+' | awk '{print $1, $2;}'

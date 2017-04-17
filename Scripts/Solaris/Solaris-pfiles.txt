@@ -1,0 +1,1 @@
+PRIV_PFILES pfiles /proc/* 2>/dev/null

@@ -1,0 +1,12 @@
+
+P=%(path)s
+PRIV_TEST -f "${P}" > /dev/null 2> /dev/null
+if [ $? -eq 0 ]; then
+    echo "ls:" `PRIV_LS -ld "${P}"`
+    DIGEST=`tw_which digest`
+    if [ -x "$DIGEST" ]; then
+        echo "md5sum:" `$DIGEST -a md5 "${P}" 2>/dev/null`
+    fi
+else
+    echo "FILE NOT FOUND"
+fi

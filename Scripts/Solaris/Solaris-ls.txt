@@ -1,0 +1,18 @@
+
+P=%(path)s
+PRIV_TEST -d "${P}" > /dev/null 2> /dev/null
+if [ $? -eq 0 ]; then
+    PRIV_TEST -x "${P}" -a -r "${P}" > /dev/null 2> /dev/null
+    if [ $? -eq 0 ]; then
+        (cd "${P}" 2> /dev/null
+         if [ $? -eq 0 ]; then
+             PRIV_LS -al
+         else
+             echo 'PERMISSION DENIED'
+         fi)
+    else
+        echo 'PERMISSION DENIED'
+    fi
+else
+    echo 'DIRECTORY NOT FOUND'
+fi

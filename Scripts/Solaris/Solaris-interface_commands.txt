@@ -1,0 +1,135 @@
+IFCONFIG=`PRIV_IFCONFIG ifconfig -a 2>/dev/null`
+OS_VERSION=`uname -r | cut -f2 -d.`
+LISTOFNICS=`echo "$IFCONFIG" | awk '/^[^ \t]/ {if ($1!~/lo/) print $1 "\n"}' | sort -u`
+LINKNAMES=`echo "$LISTOFNICS" |  sed 's/:[0-9]*://g
+s/://g' | sort -u`
+echo 'begin ifconfig:'
+echo "$IFCONFIG"
+echo 'end ifconfig:'
+echo 'begin netstat_mac:'
+netstat -n -f inet -p 2>/dev/null | awk '{ if ( $4 ~ /SP/ ) { print $1, $NF } }' | sort -u
+netstat -n -f inet6 -p 2>/dev/null | awk '{ if ( $3 ~ /local/ ) { print $1, $2 } }' | sort -u
+echo 'end netstat_mac:'
+DLADM=`tw_which dladm`
+GOT_SPEED_DUPLEX=0 # this flag indicates if netstat or ndd -set are required
+GOT_NEGOTIATION=0  # this flag indicates if kstat is required
+if [ -f "$DLADM" ]; then
+    echo 'begin dladm:'
+    if [ $OS_VERSION -lt 11 ]; then
+        echo 'begin show-dev:'
+        PRIV_DLADM $DLADM show-dev 2>/dev/null
+        if [ $? -eq 0 ]; then
+            GOT_SPEED_DUPLEX=1
+        fi
+        echo 'end show-dev:'
+    else
+        echo 'begin show-ether:'
+        PRIV_DLADM $DLADM show-ether 2>/dev/null
+        if [ $? -eq 0 ]; then
+            GOT_NEGOTIATION=1
+            GOT_SPEED_DUPLEX=1
+        fi
+        echo 'end show-ether:'
+        echo 'begin show-vlan:'
+        PRIV_DLADM $DLADM show-vlan 2>/dev/null
+        echo 'end show-vlan:'
+    fi
+    echo 'begin show-aggr:'
+    PRIV_DLADM $DLADM show-aggr 2>/dev/null
+    echo 'end show-aggr:'
+    echo 'end dladm:'
+fi
+KSTAT=`tw_which kstat`
+if [ -x "$KSTAT" -a $GOT_NEGOTIATION -eq 0 ]; then
+    echo 'begin kstats:'
+    for NAME in $LINKNAMES; do
+        GOT_SPEED_DUPLEX=1
+        $KSTAT -p -n $NAME 2>/dev/null
+        if [ $? -ne 0 ]; then
+            GOT_SPEED_DUPLEX=0
+        fi
+    done
+    echo 'end kstats:'
+fi
+if [ $OS_VERSION -lt 10 -a $GOT_SPEED_DUPLEX -eq 0 ]; then
+    echo 'begin netstats:'
+    GOT_SPEED_DUPLEX=1
+    for NAME in $LINKNAMES; do
+        netstat -k $NAME 2>/dev/null # -k option is not available for Solaris 10 or later
+        if [ $? -ne 0 ]; then
+            GOT_SPEED_DUPLEX=0
+        fi
+    done
+    echo 'end netstats:'
+fi
+NDD=`tw_which ndd`
+if [ -f "$NDD" -a $OS_VERSION -lt 11 ]; then
+    echo 'begin ndd:'
+    if [ $GOT_SPEED_DUPLEX -eq 1 ]; then # ndd -get may provide negotiation info
+        for NAME in $LINKNAMES; do
+            NIC_TYPE=`echo $NAME | sed 's/[0-9.]*//g'`
+            case $NIC_TYPE in
+                dmfe | bge | nxge | igb)
+                    echo 'NDD :' $NAME ':adv_autoneg_cap:' `PRIV_NDD $NDD -get /dev/$NAME adv_autoneg_cap 2>/dev/null`
+                ;;
+                *)  # ce, ipge (kstat) / ge, hme, qfe, eri, fjqe, fjgi (skipped to avoid ndd -set) / unknown interfaces
+                    continue
+                ;;
+            esac
+        done
+    else # ndd -set / -get to retrieve speed, duplex, and negotiation: only if all the other commands failed
+        VARS="link_status link_speed ifspeed link_mode link_duplex duplex adv_cap_autoneg adv_autoneg_cap adv_1000autoneg_cap"
+        vars_hme="link_speed link_mode adv_autoneg_cap"
+        vars_eri="adv_autoneg_cap"
+        vars_bge="adv_autoneg_cap link_duplex link_speed"
+        vars_dmfe="link_speed link_mode adv_autoneg_cap"
+        vars_qfe="link_mode adv_autoneg_cap"
+        vars_ge="link_mode adv_1000autoneg_cap"
+        vars_ce="adv_autoneg_cap"
+        vars_fjqe="link_mode link_speed adv_autoneg_cap"
+        vars_fjgi="link_mode link_speed adv_autoneg_cap"
+        vars_igb="link_duplex link_speed adv_autoneg_cap"
+        LISTOFTYPES=`echo "$LINKNAMES" | sed 's/[0-9.]*$//g' | sort -u`
+        LISTOFSETTYPES=`echo $LISTOFTYPES | sed -e 's/bge//' -e 's/dmfe//' -e 's/igb//' -e s'/vsw//'`
+        for iface in $LISTOFSETTYPES; do
+            eval initial_$iface=`PRIV_NDD $NDD -get /dev/$iface instance 2>/dev/null`
+        done
+        for NAME in $LINKNAMES; do
+            NIC_TYPE=`echo $NAME | sed 's/[0-9.]*//g'`
+            NIC_NUMBER=`echo $NAME | sed 's/[a-z]*//'`
+            eval vars=\$vars_$NIC_TYPE
+            case $NIC_TYPE in
+                ge | hme | ce | qfe | eri | fjqe | fjgi) # interfaces that need the -set option:
+                    PRIV_NDD $NDD -set /dev/$NIC_TYPE instance $NIC_NUMBER 2>/dev/null
+                    instance=`PRIV_NDD $NDD -get /dev/$NIC_TYPE instance 2>/dev/null`
+                    if [ $instance -a $instance != "$NIC_NUMBER" ]; then
+                      echo "Skipping $NAME : ndd  -set failed"
+                      continue
+                    fi
+                    for var in $vars
+                    do
+                      echo 'NDD :' $NAME ':' $var ':' `PRIV_NDD $NDD -get /dev/$NIC_TYPE $var 2>/dev/null`
+                    done
+                ;;
+                bge | dmfe | igb) #interfaces that do not need -set:
+                    for var in $vars
+                    do
+                      echo 'NDD :' $NAME ':' $var ':' `PRIV_NDD $NDD -get /dev/$NAME $var 2>/dev/null`
+                    done
+                ;;
+                dman) # Known but ignored interfaces
+                    continue
+                ;;
+                *) # unknown interface
+                    echo unknown interface: $NIC_TYPE
+                    continue
+                ;;
+            esac
+        done
+        for iface in $LISTOFSETTYPES; do
+            eval instance=\$initial_$iface
+            PRIV_NDD $NDD -set /dev/$iface instance $instance 2>/dev/null
+        done
+    fi
+    echo 'end ndd:'
+fi

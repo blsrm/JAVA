@@ -1,0 +1,7 @@
+
+P=%(path)s
+PRIV_TEST -f "${P}" -a -r "${P}"
+if [ $? -eq 0 ]; then
+    echo "begin content:"
+    PRIV_CAT "${P}" | sed -e 's/[^[:print:][:blank:]]//g'
+fi

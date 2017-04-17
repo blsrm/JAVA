@@ -1,0 +1,36 @@
+
+ihn=`hostname 2>/dev/null`
+echo 'hostname:' $ihn
+if [ -r /etc/resolv.conf ]; then
+    echo 'dns_domain:' `awk '/^(domain|search)/ { print $2; exit }' /etc/resolv.conf 2>/dev/null`
+fi
+echo 'domain:' `domainname 2>/dev/null`
+echo 'os:' `uname -sr 2>/dev/null`
+echo 'series:' `uname -m 2>/dev/null | cut -d/ -f2 | cut -c1`
+
+arch=""
+case "`uname -m 2>/dev/null`" in
+    ia64)
+        arch="ia64" ;;
+    9000/31?)
+        arch="m68000" ;;
+    9000/[34]??)
+        arch="m68k" ;;
+    9000/[678][0-9][0-9])
+        case "`getconf SC_CPU_VERSION`" in
+            523)
+                arch="pa-risc 1.0" ;;
+            528)
+                arch="pa-risc 1.1" ;;
+            532)
+                if [ "`getconf SC_KERNEL_BITS`" = "64" ]; then
+                    arch="pa-risc 2.0w"
+                else
+                    arch="pa-risc 2.0n"
+                fi
+                ;;
+        esac ;;
+esac
+if [ "$arch" != "" ]; then
+    echo "os_arch: $arch"
+fi

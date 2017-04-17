@@ -1,0 +1,117 @@
+tw_locale=`locale -a | grep -i en_us | grep -i "utf.*8" | head -n 1 2>/dev/null`
+
+LANGUAGE=""
+if [ "$tw_locale" != "" ]; then
+    LANG=$tw_locale
+    LC_ALL=$tw_locale
+else
+    LANG=C
+    LC_ALL=C
+fi
+export LANG LC_ALL
+
+stty kill '^U'
+# - some HP-UX systems have the kill character set to @ - changed 
+# it to something harmless
+
+
+# Stop alias commands changing behaviour.
+unalias -a
+
+# Insulate against systems with -u set by default.
+set +u
+
+if [ -w /tmp ] 
+then
+    # use a /tmp file to capture stderr
+    TW_CAPTURE_FILE=/tmp/tideway_status_$$
+    export TW_CAPTURE_FILE
+    rm -f $TW_CAPTURE_FILE
+
+    tw_capture(){
+        TW_NAME=$1
+        shift
+        echo begin cmd_status_err_$TW_NAME >>$TW_CAPTURE_FILE
+        "$@" 2>>$TW_CAPTURE_FILE
+        RETURN_VAL=$?
+        echo end cmd_status_err_$TW_NAME >>$TW_CAPTURE_FILE
+
+        echo cmd_status_$TW_NAME=$RETURN_VAL >>$TW_CAPTURE_FILE
+        return $RETURN_VAL
+    }
+
+    tw_report(){
+        if [ -f $TW_CAPTURE_FILE ]
+        then 
+            cat $TW_CAPTURE_FILE 2>/dev/null
+            rm -f $TW_CAPTURE_FILE 2>/dev/null
+        fi
+    }
+else
+    # can't write to /tmp - do not capture anything
+    tw_capture(){
+        shift
+        "$@" 2>/dev/null
+    }
+
+    tw_report(){
+        echo "cmd_status_err_status_unavailable=Unable to write to /tmp"
+    }
+fi 
+
+# replace the following PRIV_XXX functions with one that has the path to a
+# program to run the commands as super user, e.g. sudo. For example
+# PRIV_LSOF() {
+#   /usr/bin/sudo "$@"
+# }
+
+# lsof requires superuser privileges to display information on processes
+# other than those running as the current user
+PRIV_LSOF() {
+  sudo "$@"
+}
+
+# This function supports running privileged commands from patterns
+PRIV_RUNCMD() {
+ sudo "$@"
+}
+
+# This function supports privileged cat of files.
+# Used in patterns and to get file content.
+PRIV_CAT() {
+  cat "$@"
+}
+
+# This function supports privilege testing of attributes of files.
+# Used in conjunction with PRIV_CAT and PRIV_LS
+PRIV_TEST() {
+  test "$@"
+}
+
+# This function supports privilege listing of files and directories
+# Used in conjunction with PRIV_TEST 
+PRIV_LS() {
+  ls "$@"
+}
+
+# This function supports privilege listing of file systems and related
+# size and usage.
+PRIV_DF() {
+  "$@"
+}
+
+# lanadmin requires superuser privileges to display any interface speed
+# and negotiation settings
+PRIV_LANADMIN() {
+    "$@"
+}
+
+# swlist requires superuser privileges to list all installed packages
+PRIV_SWLIST() {
+    "$@"
+}
+
+# fcmsutil requires superuser privileges to display any HBA information
+PRIV_FCMSUTIL() {
+    "$@"
+}

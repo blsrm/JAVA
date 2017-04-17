@@ -1,0 +1,13 @@
+
+PATH=/usr/sbin/hbanyware:$PATH
+
+echo begin hbacmd_listhbas:
+PRIV_HBACMD hbacmd ListHBAs
+echo end hbacmd_listhbas:
+
+echo begin hbacmd_hbaattr:
+for WWPN in `PRIV_HBACMD hbacmd ListHBAs 2>/dev/null | awk '/Port WWN/ {print $4;}'`
+do
+    PRIV_HBACMD hbacmd HBAAttrib $WWPN 2>/dev/null
+done
+echo end hbacmd_hbaattr:
